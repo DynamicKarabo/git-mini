@@ -71,6 +71,29 @@ class Tree(VCSObject):
         sha = storage.hash_object(tree.serialize(), "tree", write=True, repo=repo)
         return sha
 
+    @classmethod
+    def read_tree(cls, repo, sha, path="."):
+        obj_type, data = storage.read_object(sha, repo)
+        if obj_type != "tree":
+            raise Exception(f"Object {sha} is not a tree")
+            
+        tree = cls(data)
+        if not os.path.exists(path):
+            os.makedirs(path)
+            
+        for mode, item_type, item_sha, name in tree.items:
+            full_path = os.path.join(path, name)
+            if item_type == "tree":
+                cls.read_tree(repo, item_sha, full_path)
+            elif item_type == "blob":
+                b_type, b_data = storage.read_object(item_sha, repo)
+                with open(full_path, "wb") as f:
+                    f.write(b_data)
+                    
+                # Restore executable bit if mode says so (simplified)
+                if mode == "100755":
+                    os.chmod(full_path, 0o755)
+
 class Commit(VCSObject):
     def __init__(self, data=None):
         self.obj_type = "commit"

@@ -50,10 +50,11 @@ class Repository:
             with open(os.path.join(self.vcsdir, "HEAD"), "w") as f:
                 f.write(sha + "\n")
 
-    def find_repo(self, path=".", required=True):
+    @classmethod
+    def find_repo(cls, path=".", required=True):
         path = os.path.abspath(path)
         if os.path.isdir(os.path.join(path, ".vcs")):
-            return Repository(path)
+            return cls(path)
         
         parent = os.path.abspath(os.path.join(path, os.pardir))
         if parent == path: # Root
@@ -61,4 +62,4 @@ class Repository:
                  raise Exception("Not a vcs repository")
              return None
         
-        return self.find_repo(parent, required)
+        return cls.find_repo(parent, required)

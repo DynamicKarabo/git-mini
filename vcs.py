@@ -38,11 +38,16 @@ def main():
 
     args = parser.parse_args()
 
-    repo = Repository()
-
     if args.command == "init":
         cmd_init(args)
-    elif args.command == "hash-object":
+        return
+
+    repo = Repository.find_repo(".", required=False)
+    if not repo:
+        print("fatal: not a vcs repository (or any of the parent directories): .vcs")
+        sys.exit(1)
+
+    if args.command == "hash-object":
         cmd_hash_object(args, repo)
     elif args.command == "cat-file":
         cmd_cat_file(args, repo)
@@ -120,7 +125,7 @@ def cmd_checkout(args, repo):
     commit = Commit(data)
     
     # Clear working directory (simplified for demo)
-    for root, dirs, files in os.walk("."):
+    for root, dirs, files in os.walk(repo.worktree):
         if ".vcs" in dirs: dirs.remove(".vcs")
         if ".git" in dirs: dirs.remove(".git")
         if "__pycache__" in dirs: dirs.remove("__pycache__")
@@ -128,10 +133,13 @@ def cmd_checkout(args, repo):
             if f not in ["vcs.py", "storage.py", "objects.py", "repository.py"]:
                 os.remove(os.path.join(root, f))
         for d in dirs:
-            os.rmdir(os.path.join(root, d)) # This will fail if dirs are not empty
+            try:
+                os.rmdir(os.path.join(root, d))
+            except OSError:
+                pass # Directory not empty or other issue
             
     # Write tree to working directory
-    Tree.read_tree(repo, commit.tree)
+    Tree.read_tree(repo, commit.tree, repo.worktree)
     
     repo.set_head(sha)
     print("Done.")
@@ -171,16 +179,16 @@ def cmd_status(args, repo):
     
     # Get all files on disk (excluding .vcs, .git, etc.)
     disk_files = {}
-    for root, dirs, files in os.walk("."):
+    for root, dirs, files in os.walk(repo.worktree):
         if ".vcs" in dirs: dirs.remove(".vcs")
         if ".git" in dirs: dirs.remove(".git")
         if "__pycache__" in dirs: dirs.remove("__pycache__")
         
         for name in files:
-            rel_path = os.path.relpath(os.path.join(root, name), ".")
+            rel_path = os.path.relpath(os.path.join(root, name), repo.worktree)
             if rel_path.startswith("./"): rel_path = rel_path[2:]
             
-            with open(rel_path, "rb") as f:
+            with open(os.path.join(repo.worktree, rel_path), "rb") as f:
                 data = f.read()
             sha = storage.hash_object(data, "blob", write=False)
             disk_files[rel_path] = sha
